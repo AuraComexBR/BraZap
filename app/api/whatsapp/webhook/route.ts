@@ -93,9 +93,21 @@ function isValidSignature(
 ): boolean {
   const appSecret = process.env.META_APP_SECRET;
 
-  // Em desenvolvimento, sem o secret configurado, nao bloqueia (facilita
-  // testar localmente). Em producao isso deve estar sempre configurado.
-  if (!appSecret) return process.env.NODE_ENV !== "production";
+  if (!appSecret) {
+    // TEMPORARIO: enquanto o META_APP_SECRET nao foi gerado (bloqueado por
+    // recuperacao de senha da conta Meta), permite testar o fluxo sem
+    // validar assinatura -- SO se a flag abaixo for setada explicitamente.
+    // Sem a flag, continua bloqueando por padrao (fail closed).
+    // Remover esse bypass (e a env var ALLOW_UNSIGNED_WEBHOOK_TEMP) assim
+    // que o App Secret real estiver configurado na Vercel.
+    if (process.env.ALLOW_UNSIGNED_WEBHOOK_TEMP === "true") {
+      console.warn(
+        "AVISO: processando webhook SEM validar assinatura (ALLOW_UNSIGNED_WEBHOOK_TEMP=true). Isso e temporario, nao usar com dado de cliente real."
+      );
+      return true;
+    }
+    return process.env.NODE_ENV !== "production";
+  }
 
   if (!signatureHeader) return false;
 
