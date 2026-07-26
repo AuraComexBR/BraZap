@@ -15,12 +15,12 @@ type NavItem = {
 // precisar ir consultar o documento. Itens "comingSoon" ficam desabilitados.
 const NAV_ITEMS: NavItem[] = [
   { label: "Inbox", href: "/inbox" },
-  { label: "Contatos", href: "/contacts", comingSoon: true },
-  { label: "Templates", href: "/templates", comingSoon: true },
-  { label: "Automações", href: "/automations", comingSoon: true },
-  { label: "Métricas", href: "/metrics", comingSoon: true },
+  { label: "Contatos", href: "/contacts" },
+  { label: "Templates", href: "/templates" },
+  { label: "Automações", href: "/automations" },
+  { label: "Métricas", href: "/metrics" },
   { label: "Tenants", href: "/admin", adminOnly: true },
-  { label: "Configurações", href: "/settings", comingSoon: true },
+  { label: "Configurações", href: "/settings" },
 ];
 
 export default function Sidebar({ isAdmin }: { isAdmin: boolean }) {

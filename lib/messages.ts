@@ -18,7 +18,7 @@ type InboundMessage = {
 export async function persistInboundMessage(
   tenantId: string,
   msg: InboundMessage
-) {
+): Promise<{ conversationId: string; contactId: string }> {
   const supabase = getSupabaseServiceClient();
 
   const { data: contact, error: contactError } = await supabase
@@ -73,4 +73,6 @@ export async function persistInboundMessage(
     .from("conversations")
     .update({ last_message_at: new Date().toISOString() })
     .eq("id", conversation.id);
+
+  return { conversationId: conversation.id, contactId: contact.id };
 }

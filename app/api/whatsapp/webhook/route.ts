@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getTenantByPhoneNumberId } from "@/lib/tenant";
 import { persistInboundMessage } from "@/lib/messages";
+import { maybeSendAutomatedReply } from "@/lib/automations";
 
 /**
  * GET: handshake de verificacao do webhook, exigido pela Meta na hora de
@@ -68,12 +69,23 @@ export async function POST(req: NextRequest) {
         if (m.type !== "text") continue;
 
         try {
-          await persistInboundMessage(tenant.tenantId, {
-            waId: m.from,
-            contactName: value?.contacts?.[0]?.profile?.name,
-            waMessageId: m.id,
-            body: m.text?.body ?? "",
-          });
+          const body = m.text?.body ?? "";
+          const { conversationId } = await persistInboundMessage(
+            tenant.tenantId,
+            {
+              waId: m.from,
+              contactName: value?.contacts?.[0]?.profile?.name,
+              waMessageId: m.id,
+              body,
+            }
+          );
+
+          await maybeSendAutomatedReply(
+            tenant.tenantId,
+            conversationId,
+            m.from,
+            body
+          );
         } catch (err) {
           console.error("Falha ao persistir mensagem recebida:", err);
         }
