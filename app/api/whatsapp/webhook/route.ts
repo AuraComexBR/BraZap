@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getTenantByPhoneNumberId } from "@/lib/tenant";
+import { persistInboundMessage } from "@/lib/messages";
 
 /**
  * GET: handshake de verificacao do webhook, exigido pela Meta na hora de
@@ -26,15 +27,13 @@ export async function GET(req: NextRequest) {
  * POST: eventos de mensagem/status enviados pela Meta.
  *
  * Pontos importantes:
- * - Responder rapido (200) para a Meta nao ficar reenviando o evento.
- *   Qualquer processamento pesado deve ser enfileirado, nao feito aqui.
- * - Validar a assinatura X-Hub-Signature-256 usando o META_APP_SECRET
+ * - Responde rapido (200) para a Meta nao ficar reenviando o evento.
+ *   O processamento aqui e minimo por enquanto (insercao simples); se
+ *   crescer, mover para fila em vez de fazer tudo sincrono na request.
+ * - Valida a assinatura X-Hub-Signature-256 usando o META_APP_SECRET
  *   antes de confiar no payload.
- * - Rotear pelo phone_number_id do payload para achar o tenant certo
+ * - Roteia pelo phone_number_id do payload para achar o tenant certo
  *   (multi-tenant: varios clientes do BraZap batem nesse mesmo endpoint).
- *
- * TODO: persistir a mensagem em `messages` (ver supabase/schema.sql) e
- * disparar a atualizacao em tempo real via Supabase Realtime.
  */
 export async function POST(req: NextRequest) {
   const rawBody = await req.text();
@@ -43,21 +42,45 @@ export async function POST(req: NextRequest) {
     return new NextResponse("Invalid signature", { status: 401 });
   }
 
-  const payload = JSON.parse(rawBody);
+  let payload: any;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return new NextResponse("Invalid JSON", { status: 400 });
+  }
 
-  const phoneNumberId =
-    payload?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
+  const value = payload?.entry?.[0]?.changes?.[0]?.value;
+  const phoneNumberId = value?.metadata?.phone_number_id;
 
   if (phoneNumberId) {
     const tenant = await getTenantByPhoneNumberId(phoneNumberId);
+
     if (!tenant) {
       console.warn(
         `Webhook recebido para phone_number_id desconhecido: ${phoneNumberId}`
       );
     } else {
-      // TODO: processar payload.entry[0].changes[0].value.messages / .statuses
-      // e gravar em `messages` associado a tenant.tenantId.
-      console.log(`Evento recebido para tenant ${tenant.tenantId}`);
+      const inboundMessages = value?.messages ?? [];
+
+      for (const m of inboundMessages) {
+        // Por enquanto so tratamos mensagens de texto. Outros tipos
+        // (imagem, audio, botao, etc.) ficam para uma fase seguinte.
+        if (m.type !== "text") continue;
+
+        try {
+          await persistInboundMessage(tenant.tenantId, {
+            waId: m.from,
+            contactName: value?.contacts?.[0]?.profile?.name,
+            waMessageId: m.id,
+            body: m.text?.body ?? "",
+          });
+        } catch (err) {
+          console.error("Falha ao persistir mensagem recebida:", err);
+        }
+      }
+
+      // TODO: tratar value?.statuses (delivered/read/failed de mensagens
+      // enviadas por nos) numa fase seguinte.
     }
   }
 
