@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 /**
  * Roda em toda request: renova a sessao do agente (cookies do Supabase
- * Auth) e bloqueia acesso ao /inbox para quem nao estiver logado.
+ * Auth) e bloqueia acesso ao /inbox e /admin para quem nao estiver logado.
+ * A checagem fina de "e superadmin?" para /admin fica no layout (precisa
+ * de uma query, nao da pra fazer so com a sessao aqui).
  */
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -39,7 +41,12 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && request.nextUrl.pathname.startsWith("/inbox")) {
+  const protectedPrefixes = ["/inbox", "/admin"];
+  const isProtected = protectedPrefixes.some((p) =>
+    request.nextUrl.pathname.startsWith(p)
+  );
+
+  if (!user && isProtected) {
     const loginUrl = new URL("/login", request.url);
     return NextResponse.redirect(loginUrl);
   }
@@ -48,5 +55,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/inbox/:path*"],
+  matcher: ["/inbox/:path*", "/admin/:path*"],
 };
